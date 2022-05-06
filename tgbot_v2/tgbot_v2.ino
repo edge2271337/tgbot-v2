@@ -2,6 +2,10 @@
 #include <ESP8266WiFi.h>
 #include <SimplePortal.h>
 #include <FastBot.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 //инициализация переменных сети
 char* ssid;
 char* password;
@@ -11,9 +15,13 @@ FastBot bot(token);
 #define logtoken "HERE_LOGGER_TOKEN"
 FastBot logger(logtoken);
 //менюха бота
-const char* menu = "Случайный анекдот \n О боте";
-String loggerChatID = "HERE_YOUR_CHAR_ID"; // chat id пользователя, который получает сообщения от logger
+const char* menu = "Случайный анекдот \t Случайная карта OSU \n О боте";
+String loggerChatID = "HERE_YOUR_CHATID";
 bool attachFlag = false;
+uint32_t rndMap; //объявление переменной рандом мапы
+//api chimu.moe
+String serverName = "https://api.chimu.moe/v1/map/";
+String host = "https://api.chimu.moe";
 //анеки
 const char* aneks[] = {"https://telegra.ph/bilet-do-harkova-05-03",
                        "https://telegra.ph/gus-05-03",
@@ -34,7 +42,7 @@ const char* aneks[] = {"https://telegra.ph/bilet-do-harkova-05-03",
 
 
 void setup() {
-  
+
   Serial.begin(9600);
   startPortal();
 
@@ -44,7 +52,7 @@ void setup() {
 }
 
 void loop() {
-  
+
   connectWiFi();
   if (!attachFlag) {
     bot.attach(newMsg);
@@ -95,16 +103,74 @@ class Timer {
 };
 
 void newMsg(FB_msg& msg) {
-  String message="";
-  
+  String message = "";
+
   if (msg.text == "Случайный анекдот") {
     message = aneks[random(0, 15)];
     bot.sendMessage(message, msg.chatID);
   }
   if (msg.text == "/start" or msg.text == "О боте") {
+    //bot.closeMenu(msg.chatID);
     bot.showMenu(menu, msg.chatID);
     message = "Здравствуй, " + msg.username + ".\nЭто бот для случайных лучших анекдотов.\nСоздатель:@NeverForever";
     bot.sendMessage(message, msg.chatID);
   }
-  logger.sendMessage("Сообщение от юзера "+msg.username+":\n"+msg.text+"\nОтвет бота:\n"+message,loggerChatID);
+  if (msg.text == "Случайная карта OSU") {
+    WiFiClientSecure client;
+    HTTPClient http;
+    client.setInsecure();
+    client.connect(host, 443);
+    int httpResponseCode = 404;
+    while (httpResponseCode > 0 and httpResponseCode == 404) {
+      rndMap = random(0, 1000000);
+      String serverPath = serverName + rndMap;
+
+      // Your Domain name with URL path or IP address with path
+      http.begin(client, serverPath.c_str());
+
+      // Send HTTP GET request
+      httpResponseCode = http.GET();
+
+      if (httpResponseCode > 0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+        String payload = http.getString();
+        Serial.println(payload);
+        StaticJsonDocument<768> doc;
+
+        DeserializationError error = deserializeJson(doc, payload);
+
+        if (error) {
+          Serial.print(F("deserializeJson() failed: "));
+          Serial.println(error.f_str());
+          return;
+        }
+
+        int BeatmapId = doc["BeatmapId"]; // 53
+        int ParentSetId = doc["ParentSetId"]; // 3
+        const String DiffName = doc["DiffName"]; // "-Crusin-"
+        const char* FileMD5 = doc["FileMD5"]; // "1d23c37a2fda439be752ae2bca06c0cd"
+        int Mode = doc["Mode"]; // 0
+        int BPM = doc["BPM"]; // 172
+        int AR = doc["AR"]; // 4
+        int OD = doc["OD"]; // 4
+        int CS = doc["CS"]; // 5
+        int HP = doc["HP"]; // 3
+        int TotalLength = doc["TotalLength"]; // 83
+        int HitLength = doc["HitLength"]; // 77
+        long Playcount = doc["Playcount"]; // 115056
+        long Passcount = doc["Passcount"]; // 53367
+        int MaxCombo = doc["MaxCombo"]; // 124
+        float DifficultyRating = doc["DifficultyRating"]; // 2.18294
+        const String OsuFile = doc["OsuFile"]; // "Ni-Ni - 1,2,3,4, 007 [Wipeout Series] (MCXD) [-Crusin-].osu"
+        const String DownloadPath = doc["DownloadPath"]; // "/d/3"
+        if (OsuFile != "null") {
+          message = "Карта: " + OsuFile + "\nBPM: " + BPM + "\nСложность: " + DifficultyRating + "\nСкачать: " + serverName + BeatmapId + DownloadPath;
+          bot.sendMessage(message, msg.chatID);
+        }
+        http.end();
+      }
+    }
+  }
+  logger.sendMessage("Сообщение от юзера " + msg.username + ":\n" + msg.text + "\nОтвет бота:\n" + message, loggerChatID);
 }
