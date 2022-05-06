@@ -6,10 +6,13 @@
 char* ssid;
 char* password;
 //инициализация бота
-#define token "HERE_YOUR_TOKEN"  // Токен бота
+#define token "HERE_BOT_TOKEN"  // Токен бота
 FastBot bot(token);
+#define logtoken "HERE_LOGGER_TOKEN"
+FastBot logger(logtoken);
 //менюха бота
 const char* menu = "Случайный анекдот \n О боте";
+String loggerChatID = "HERE_YOUR_CHAR_ID"; // chat id пользователя, который получает сообщения от logger
 bool attachFlag = false;
 //анеки
 const char* aneks[] = {"https://telegra.ph/bilet-do-harkova-05-03",
@@ -48,6 +51,7 @@ void loop() {
     attachFlag = true;
   }
   bot.tick();
+  logger.tick();
 }
 
 void connectWiFi() {
@@ -91,11 +95,16 @@ class Timer {
 };
 
 void newMsg(FB_msg& msg) {
+  String message="";
+  
   if (msg.text == "Случайный анекдот") {
-    bot.sendMessage(aneks[random(0, 15)], msg.chatID);
+    message = aneks[random(0, 15)];
+    bot.sendMessage(message, msg.chatID);
   }
   if (msg.text == "/start" or msg.text == "О боте") {
     bot.showMenu(menu, msg.chatID);
-    bot.sendMessage("Здравствуй, " + msg.username + ".\nЭто бот для случайных лучших анекдотов.\nСоздатель:@NeverForever", msg.chatID);
+    message = "Здравствуй, " + msg.username + ".\nЭто бот для случайных лучших анекдотов.\nСоздатель:@NeverForever";
+    bot.sendMessage(message, msg.chatID);
   }
+  logger.sendMessage("Сообщение от юзера "+msg.username+":\n"+msg.text+"\nОтвет бота:\n"+message,loggerChatID);
 }
